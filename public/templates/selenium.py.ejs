@@ -1,0 +1,71 @@
+"""
+Auto-generated Selenium test script
+Generated at: <%= new Date().toISOString() %>
+Test case: <%= recording.name %>
+Steps: <%= recording.steps.length %>
+"""
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+
+def test_<%= recording.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() %>():
+    """<%= recording.name %>"""
+
+    driver = webdriver.Chrome()
+    driver.implicitly_wait(10)
+    wait = WebDriverWait(driver, 10)
+
+    try:
+<% if (recording.steps.length > 0) { %>
+        # Navigate to starting page
+        driver.get("<%= recording.steps[0].url %>")
+
+<% recording.steps.forEach((step, index) => { %>
+        # Step <%= index + 1 %>: <%= step.action %>
+        #   Target: <%= step.target.xpath || step.target.selector %>
+<% if (step.action === 'click') { %>
+<% if (step.target.xpath) { %>
+        driver.find_element(By.XPATH, "<%= step.target.xpath %>").click()
+<% } else { %>
+        driver.find_element(By.CSS_SELECTOR, "<%= step.target.selector %>").click()
+<% } %>
+<% } else if (step.action === 'input') { %>
+<% if (step.target.xpath) { %>
+        element = driver.find_element(By.XPATH, "<%= step.target.xpath %>")
+<% } else { %>
+        element = driver.find_element(By.CSS_SELECTOR, "<%= step.target.selector %>")
+<% } %>
+        element.clear()
+        element.send_keys("<%= step.value || '' %>")
+<% } else if (step.action === 'select') { %>
+<% if (step.target.xpath) { %>
+        element = driver.find_element(By.XPATH, "<%= step.target.xpath %>")
+<% } else { %>
+        element = driver.find_element(By.CSS_SELECTOR, "<%= step.target.selector %>")
+<% } %>
+        if <%= step.value === 'true' ? 'not ' : '' %>element.is_selected():
+            element.click()
+<% } else if (step.action === 'navigate') { %>
+        driver.get("<%= step.url || recording.steps[0].url %>")
+<% } else if (step.action === 'wait') { %>
+        import time
+        time.sleep(<%= (step.value || 1000) / 1000 %>)
+<% } %>
+
+<% }) %>
+        # TODO: Add assertions here
+        # assert "expected_text" in driver.page_source
+<% } else { %>
+        # No steps recorded yet
+        pass
+<% } %>
+
+    finally:
+        driver.quit()
+
+
+if __name__ == "__main__":
+    test_<%= recording.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() %>()

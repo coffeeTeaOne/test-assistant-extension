@@ -1,0 +1,61 @@
+"""
+Auto-generated Playwright async test script
+Generated at: <%= new Date().toISOString() %>
+Test case: <%= recording.name %>
+Steps: <%= recording.steps.length %>
+"""
+
+import asyncio
+from playwright.async_api import async_playwright
+
+
+async def run_test():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False)
+        context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+        page = await context.new_page()
+
+<% if (recording.steps.length > 0) { %>
+        # Navigate to starting page
+        await page.goto("<%= recording.steps[0].url %>")
+        await page.wait_for_load_state("networkidle")
+
+<% recording.steps.forEach((step, index) => { %>
+        # Step <%= index + 1 %>: <%= step.action %>
+        #   Target: <%= step.target.xpath || step.target.selector %>
+<% if (step.action === 'click') { %>
+<% if (step.target.xpath) { %>
+        await page.click("xpath=<%= step.target.xpath %>")
+<% } else { %>
+        await page.click("<%= step.target.selector %>")
+<% } %>
+<% } else if (step.action === 'input') { %>
+<% if (step.target.xpath) { %>
+        await page.fill("xpath=<%= step.target.xpath %>", "<%= step.value || '' %>")
+<% } else { %>
+        await page.fill("<%= step.target.selector %>", "<%= step.value || '' %>")
+<% } %>
+<% } else if (step.action === 'select') { %>
+<% if (step.target.xpath) { %>
+        await page.check("xpath=<%= step.target.xpath %>")
+<% } else { %>
+        await page.check("<%= step.target.selector %>")
+<% } %>
+<% } else if (step.action === 'navigate') { %>
+        await page.goto("<%= step.url || recording.steps[0].url %>")
+        await page.wait_for_load_state("networkidle")
+<% } else if (step.action === 'wait') { %>
+        await page.wait_for_timeout(<%= step.value || 1000 %>)
+<% } %>
+
+<% }) %>
+        # TODO: Add assertions here
+        # await expect(page).to_have_url("expected_url")
+
+<% } %>
+        await context.close()
+        await browser.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(run_test())

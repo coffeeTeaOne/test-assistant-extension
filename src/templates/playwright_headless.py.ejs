@@ -1,0 +1,67 @@
+"""
+Auto-generated Playwright headless test script (CI/CD ready)
+Generated at: <%= new Date().toISOString() %>
+Test case: <%= recording.name %>
+Steps: <%= recording.steps.length %>
+
+Run with: pytest this_file.py
+"""
+
+from playwright.sync_api import sync_playwright
+import pytest
+
+
+@pytest.fixture
+def page():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1920, "height": 1080})
+        page = context.new_page()
+        yield page
+        context.close()
+        browser.close()
+
+
+def test_<%= recording.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() %>(page):
+    """<%= recording.name %>"""
+
+<% if (recording.steps.length > 0) { %>
+    # Navigate to starting page
+    page.goto("<%= recording.steps[0].url %>")
+    page.wait_for_load_state("networkidle")
+
+<% recording.steps.forEach((step, index) => { %>
+    # Step <%= index + 1 %>: <%= step.action %>
+    #   Target: <%= step.target.xpath || step.target.selector %>
+<% if (step.action === 'click') { %>
+<% if (step.target.xpath) { %>
+    page.click("xpath=<%= step.target.xpath %>")
+<% } else { %>
+    page.click("<%= step.target.selector %>")
+<% } %>
+<% } else if (step.action === 'input') { %>
+<% if (step.target.xpath) { %>
+    page.fill("xpath=<%= step.target.xpath %>", "<%= step.value || '' %>")
+<% } else { %>
+    page.fill("<%= step.target.selector %>", "<%= step.value || '' %>")
+<% } %>
+<% } else if (step.action === 'select') { %>
+<% if (step.target.xpath) { %>
+    page.check("xpath=<%= step.target.xpath %>")
+<% } else { %>
+    page.check("<%= step.target.selector %>")
+<% } %>
+<% } else if (step.action === 'navigate') { %>
+    page.goto("<%= step.url || recording.steps[0].url %>")
+    page.wait_for_load_state("networkidle")
+<% } else if (step.action === 'wait') { %>
+    page.wait_for_timeout(<%= step.value || 1000 %>)
+<% } %>
+
+<% }) %>
+    # TODO: Add assertions here
+    # assert page.url == "expected_url"
+<% } else { %>
+    # No steps recorded yet
+    pass
+<% } %>
