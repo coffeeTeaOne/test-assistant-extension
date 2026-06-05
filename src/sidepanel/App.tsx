@@ -16,13 +16,11 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-full bg-gray-900 text-gray-100">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-700 bg-gray-800">
+      <div className="px-3 py-2 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">🐞</span>
-          <div className="flex flex-col">
-            <h1 className="font-bold text-sm text-gray-100 leading-tight">七星瓢虫</h1>
-            <span className="text-[10px] text-gray-400 leading-tight">测试智能助手V1.0版本</span>
-          </div>
+          <span className="font-bold text-sm text-gray-100 leading-tight">七星瓢虫</span>
+          <span className="text-[10px] text-gray-400 leading-tight">测试智能助手V1.0版本</span>
         </div>
       </div>
 
