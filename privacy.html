@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>隐私政策 - 七星瓢虫 Ladybug</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.7;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 28px;
+      color: #60a5fa;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    h2 {
+      font-size: 18px;
+      color: #93c5fd;
+      margin-top: 28px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    p {
+      margin-bottom: 12px;
+      color: #cbd5e1;
+    }
+    ul {
+      margin-left: 20px;
+      margin-bottom: 16px;
+    }
+    li {
+      margin-bottom: 8px;
+      color: #cbd5e1;
+    }
+    .highlight {
+      background: #1e293b;
+      padding: 16px 20px;
+      border-radius: 8px;
+      border-left: 3px solid #3b82f6;
+      margin: 20px 0;
+    }
+    .lang-switch {
+      text-align: right;
+      margin-bottom: 20px;
+    }
+    .lang-switch a {
+      color: #60a5fa;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .lang-switch a:hover { text-decoration: underline; }
+    .en { display: none; }
+    :target ~ .zh { display: none; }
+    :target ~ .en { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="lang-switch">
+      <a href="#zh">中文</a> / <a href="#en">English</a>
+    </div>
+
+    <!-- 中文 -->
+    <div class="zh" id="zh">
+      <h1>🐞 七星瓢虫 隐私政策</h1>
+      <p class="subtitle">最后更新：2026年6月6日</p>
+
+      <div class="highlight">
+        <strong>核心原则：</strong>七星瓢虫（Ladybug）是一款纯本地运行的 Chrome 扩展，<strong>不会收集、上传或分享您的任何个人信息</strong>。
+      </div>
+
+      <h2>1. 我们收集的信息</h2>
+      <p>我们不收集任何个人信息。扩展运行过程中涉及的数据仅限于：</p>
+      <ul>
+        <li><strong>录制的操作步骤</strong>：您在网页上的点击、输入等操作记录，仅保存在浏览器本地存储（chrome.storage.local）中</li>
+        <li><strong>AI 配置</strong>：您自行填写的 API Key、Base URL 等，仅保存在浏览器本地</li>
+        <li><strong>登录配置档案</strong>：您主动保存的登录流程，仅保存在浏览器本地</li>
+      </ul>
+
+      <h2>2. 数据存储位置</h2>
+      <p>所有数据均存储在您的浏览器本地（chrome.storage.local），<strong>不会上传到任何远程服务器</strong>。卸载扩展后，这些数据将被清除。</p>
+
+      <h2>3. 第三方服务</h2>
+      <p>扩展的 AI 对话功能需要调用您自行配置的大模型 API（如 OpenAI、Claude、DeepSeek 等）。这些 API 调用直接由您的浏览器发起，数据仅发送至您配置的 API 端点，我们不会介入或中转。</p>
+
+      <h2>4. 权限说明</h2>
+      <p>扩展申请的权限仅用于实现核心功能：</p>
+      <ul>
+        <li><code>activeTab</code> / <code>scripting</code> — 在当前标签页注入脚本以录制和回放操作</li>
+        <li><code>storage</code> — 本地保存录制用例和配置</li>
+        <li><code>sidePanel</code> — 提供侧边栏操作面板</li>
+        <li><code>downloads</code> — 导出 JSON 文件到本地</li>
+        <li><code>&lt;all_urls&gt;</code> — 支持录制任意网页的操作</li>
+      </ul>
+
+      <h2>5. 联系我们</h2>
+      <p>如有隐私相关问题，请通过 GitHub Issues 反馈：<a href="https://github.com/coffeeTeaOne/test-assistant-extension/issues" style="color:#60a5fa">https://github.com/coffeeTeaOne/test-assistant-extension/issues</a></p>
+    </div>
+
+    <!-- English -->
+    <div class="en">
+      <h1>🐞 Ladybug Privacy Policy</h1>
+      <p class="subtitle">Last updated: June 6, 2026</p>
+
+      <div class="highlight">
+        <strong>Core Principle:</strong> Ladybug is a purely local Chrome extension that <strong>does not collect, upload, or share any of your personal information</strong>.
+      </div>
+
+      <h2>1. Information We Collect</h2>
+      <p>We do not collect any personal information. Data involved during extension operation is limited to:</p>
+      <ul>
+        <li><strong>Recorded action steps</strong>: Your click, input and other web operations, stored only in browser local storage (chrome.storage.local)</li>
+        <li><strong>AI Configuration</strong>: API Key, Base URL etc. that you fill in yourself, stored only locally in browser</li>
+        <li><strong>Login Profiles</strong>: Login flows that you actively save, stored only locally in browser</li>
+      </ul>
+
+      <h2>2. Data Storage</h2>
+      <p>All data is stored in your browser locally (chrome.storage.local) and <strong>will not be uploaded to any remote server</strong>. Data will be cleared when the extension is uninstalled.</p>
+
+      <h2>3. Third-Party Services</h2>
+      <p>The AI chat feature requires calling the LLM API that you configure yourself (such as OpenAI, Claude, DeepSeek, etc.). These API calls are initiated directly by your browser, and data is only sent to the API endpoint you configured. We do not intercept or relay.</p>
+
+      <h2>4. Permissions</h2>
+      <p>Permissions requested are solely for core functionality:</p>
+      <ul>
+        <li><code>activeTab</code> / <code>scripting</code> — Inject scripts into current tab for recording and playback</li>
+        <li><code>storage</code> — Save recordings and settings locally</li>
+        <li><code>sidePanel</code> — Provide sidebar panel</li>
+        <li><code>downloads</code> — Export JSON files to local disk</li>
+        <li><code>&lt;all_urls&gt;</code> — Support recording operations on any webpage</li>
+      </ul>
+
+      <h2>5. Contact Us</h2>
+      <p>For privacy-related questions, please open a GitHub Issue: <a href="https://github.com/coffeeTeaOne/test-assistant-extension/issues" style="color:#60a5fa">https://github.com/coffeeTeaOne/test-assistant-extension/issues</a></p>
+    </div>
+  </div>
+</body>
+</html>

@@ -22,6 +22,10 @@ export default function SettingsPanel() {
   const [executingProfileId, setExecutingProfileId] = useState<string | null>(null)
   const [localDirName, setLocalDirName] = useState<string | null>(null)
 
+  // 编辑状态
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+
   useEffect(() => {
     loadConfig()
     loadExportConfig()
@@ -183,6 +187,73 @@ export default function SettingsPanel() {
     return map[action] || action
   }
 
+  const startEdit = (key: string, value: string) => { setEditingKey(key); setEditingValue(value) }
+  const cancelEdit = () => { setEditingKey(null); setEditingValue('') }
+
+  const updateProfileName = async (profileId: string, newName: string) => {
+    const profile = loginProfiles.find(p => p.id === profileId)
+    if (!profile) return
+    const updated = { ...profile, name: newName }
+    try {
+      await chrome.runtime.sendMessage({ type: 'SAVE_LOGIN_PROFILE', payload: updated })
+      setLoginProfiles(prev => prev.map(p => p.id === profileId ? updated : p))
+    } catch (error) { console.error('Failed to update profile name:', error) }
+  }
+
+  const updateProfileStepField = async (profileId: string, stepId: string, fieldPath: string, newValue: string) => {
+    const profile = loginProfiles.find(p => p.id === profileId)
+    if (!profile) return
+    const updatedSteps = profile.steps.map(s => {
+      if (s.id !== stepId) return s
+      const updated = { ...s, target: { ...s.target } }
+      if (fieldPath === 'selector') updated.target.selector = newValue
+      else if (fieldPath === 'xpath') updated.target.xpath = newValue
+      else if (fieldPath === 'text') updated.target.text = newValue
+      else if (fieldPath === 'aria') updated.target.aria = newValue
+      else if (fieldPath === 'value') (updated as any).value = newValue
+      else if (fieldPath === 'url') (updated as any).url = newValue
+      return updated
+    })
+    const updated = { ...profile, steps: updatedSteps }
+    try {
+      await chrome.runtime.sendMessage({ type: 'SAVE_LOGIN_PROFILE', payload: updated })
+      setLoginProfiles(prev => prev.map(p => p.id === profileId ? updated : p))
+    } catch (error) { console.error('Failed to update profile step:', error) }
+  }
+
+  const commitEdit = (profileId: string, stepId: string | null, fieldPath: string) => {
+    if (editingKey) {
+      if (stepId) updateProfileStepField(profileId, stepId, fieldPath, editingValue)
+      else if (fieldPath === 'name') updateProfileName(profileId, editingValue)
+    }
+    setEditingKey(null); setEditingValue('')
+  }
+
+  const renderEditableField = (profileId: string, stepId: string | null, fieldPath: string, label: string, value: string | undefined, codeStyle = false) => {
+    const key = stepId ? `${profileId}:${stepId}:${fieldPath}` : `${profileId}:${fieldPath}`
+    const displayValue = value || ''
+    if (editingKey === key) {
+      return (
+        <div className="flex items-center gap-1" key={key}>
+          <span className="text-gray-500 min-w-[3em]">{label}:</span>
+          <input autoFocus className={`flex-1 min-w-0 bg-gray-900 border border-blue-500 rounded px-1 py-0.5 text-[10px] text-gray-200 outline-none ${codeStyle ? 'font-mono' : ''}`} value={editingValue} onChange={e => setEditingValue(e.target.value)}
+            onBlur={() => commitEdit(profileId, stepId, fieldPath)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitEdit(profileId, stepId, fieldPath)
+              else if (e.key === 'Escape') cancelEdit()
+            }}
+          />
+        </div>
+      )
+    }
+    return (
+      <div className="flex items-center gap-1 cursor-pointer hover:text-blue-300" key={key} onClick={() => startEdit(key, displayValue)}>
+        <span className="text-gray-500 min-w-[3em]">{label}:</span>
+        <span className={`text-gray-300 truncate ${codeStyle ? 'font-mono text-[9px]' : ''} ${!value ? 'text-gray-600 italic' : ''}`}>{displayValue || t.empty}</span>
+      </div>
+    )
+  }
+
   const saveConfig = async () => {
     setLoading(true)
     try {
@@ -257,9 +328,19 @@ export default function SettingsPanel() {
                       <span className="shrink-0 px-1.5 py-0.5 bg-blue-600 text-white rounded text-[9px]">
                         {t.loginConfigLabel}
                       </span>
-                      <span className="text-xs font-medium text-blue-300 truncate">
-                        {profile.name}
-                      </span>
+                      <div className="flex-1 min-w-0 cursor-pointer hover:text-blue-200" onClick={() => startEdit(`${profile.id}:name`, profile.name)}>
+                        {editingKey === `${profile.id}:name` ? (
+                          <input autoFocus className="w-full bg-gray-900 border border-blue-500 rounded px-1 py-0.5 text-xs text-gray-200 outline-none" value={editingValue} onChange={e => setEditingValue(e.target.value)}
+                            onBlur={() => commitEdit(profile.id, null, 'name')}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commitEdit(profile.id, null, 'name')
+                              else if (e.key === 'Escape') cancelEdit()
+                            }}
+                          />
+                        ) : (
+                          <span className="text-xs font-medium text-blue-300 truncate">{profile.name}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -319,26 +400,10 @@ export default function SettingsPanel() {
                             <span className="font-medium text-gray-400">{actionLabel(step.action)}</span>
                           </div>
                           <div className="pl-4 space-y-0.5 text-gray-400">
-                            <div className="break-all">
-                              <span className="text-gray-600">选择器: </span>
-                              <code className="text-gray-300 bg-gray-800 px-1 rounded">{step.target.selector}</code>
-                            </div>
-                            {step.target.xpath && (
-                              <div className="break-all">
-                                <span className="text-gray-600">XPath: </span>
-                                <code className="text-gray-300 bg-gray-800 px-1 rounded">{step.target.xpath}</code>
-                              </div>
-                            )}
-                            {step.value !== undefined && (
-                              <div className="break-all">
-                                <span className="text-gray-600">值: </span>
-                                <code className="text-yellow-400 bg-gray-800 px-1 rounded">"{step.value}"</code>
-                              </div>
-                            )}
-                            <div className="break-all">
-                              <span className="text-gray-600">页面: </span>
-                              <span className="text-gray-500">{step.url}</span>
-                            </div>
+                            {renderEditableField(profile.id, step.id, 'selector', t.selector, step.target.selector, true)}
+                            {renderEditableField(profile.id, step.id, 'xpath', 'XPath', step.target.xpath, true)}
+                            {step.value !== undefined && renderEditableField(profile.id, step.id, 'value', t.value, step.value, true)}
+                            {renderEditableField(profile.id, step.id, 'url', t.pageLabel, step.url)}
                           </div>
                         </div>
                       ))}
