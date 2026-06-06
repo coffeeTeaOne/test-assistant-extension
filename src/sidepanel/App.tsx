@@ -2,15 +2,17 @@ import { useState } from 'react'
 import TestCaseList from './components/TestCaseList'
 import AIChatPanel from './components/AIChatPanel'
 import SettingsPanel from './components/SettingsPanel'
+import { I18nProvider, useI18n } from '../i18n/I18nContext'
 
 type Tab = 'cases' | 'ai' | 'settings'
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('cases')
+  const { t } = useI18n()
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'cases', label: '用例', icon: '📋' },
-    { key: 'ai', label: 'AI', icon: '💬' },
+    { key: 'cases', label: t.tabCases, icon: '📋' },
+    { key: 'ai', label: t.tabAI, icon: '💬' },
   ]
 
   return (
@@ -19,8 +21,8 @@ export default function App() {
       <div className="px-3 py-2 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">🐞</span>
-          <span className="font-bold text-sm text-gray-100 leading-tight">七星瓢虫</span>
-          <span className="text-[10px] text-gray-400 leading-tight">测试智能助手V1.0版本</span>
+          <span className="font-bold text-sm text-gray-100 leading-tight">{t.appName}</span>
+          <span className="text-[10px] text-gray-400 leading-tight">{t.appSubtitle}</span>
         </div>
       </div>
 
@@ -47,7 +49,7 @@ export default function App() {
               ? 'text-blue-400 bg-gray-700/50'
               : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/30'
           }`}
-          title="设置"
+          title={t.tabSettings}
         >
           ⚙
         </button>
@@ -60,5 +62,13 @@ export default function App() {
         {activeTab === 'settings' && <SettingsPanel />}
       </div>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   )
 }

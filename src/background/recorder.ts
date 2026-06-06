@@ -26,10 +26,22 @@ export class Recorder {
   async startRecording(): Promise<RecordingSession> {
     this.isRecording = true
 
+    // 读取语言设置（side panel 的 I18nContext 会同步到这里）
+    let lang = 'zh'
+    try {
+      const stored = await chrome.storage.local.get('app_language')
+      if (stored.app_language === 'zh' || stored.app_language === 'en') {
+        lang = stored.app_language
+      }
+    } catch { /* ignore */ }
+
+    const prefix = lang === 'en' ? 'Recording' : '录制'
+    const locale = lang === 'en' ? 'en-US' : 'zh-CN'
+
     // 创建新录制会话
     const session: RecordingSession = {
       id: generateId(),
-      name: `录制_${new Date().toLocaleString('zh-CN')}`,
+      name: `${prefix}_${new Date().toLocaleString(locale)}`,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       steps: []

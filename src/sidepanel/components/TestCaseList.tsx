@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { RecordingSession, ScriptCode, StepExecutionResult, LoginProfile, TestStep } from '../../shared/types'
 import ScriptViewer from './ScriptViewer'
 import { getLocalExportDir } from '../../storage/local-export'
+import { useI18n } from '../../i18n/I18nContext'
 
 export default function TestCaseList() {
+  const { t } = useI18n()
   // ========== 录制控制状态（从 RecorderPanel 迁移）==========
   const [isRecording, setIsRecording] = useState(false)
   const [liveSteps, setLiveSteps] = useState<TestStep[]>([])
@@ -15,7 +17,7 @@ export default function TestCaseList() {
   const [selectedRecording, setSelectedRecording] = useState<RecordingSession | null>(null)
   const [script, setScript] = useState<ScriptCode | null>(null)
   const [loading, setLoading] = useState(false)
-  const [framework, setFramework] = useState<'playwright' | 'selenium'>('playwright')
+  // framework 固定为 playwright，不再提供切换
 
   // 执行状态
   const [executing, setExecuting] = useState(false)
@@ -43,12 +45,12 @@ export default function TestCaseList() {
   const checkContentScript = async (): Promise<boolean> => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (!tab?.id) { setCsError('无法获取当前标签页'); return false }
+      if (!tab?.id) { setCsError(t.csErrorMsgTab); return false }
       await chrome.tabs.sendMessage(tab.id, { type: 'PING' })
       setCsError(null)
       return true
     } catch {
-      setCsError('当前页面的录制脚本未加载，请刷新页面后重试')
+      setCsError(t.csErrorMsgRefresh)
       return false
     }
   }
@@ -183,16 +185,16 @@ export default function TestCaseList() {
   const getLoginProfileForRecording = (recordingId: string) => loginProfiles.find(p => p.sourceRecordingId === recordingId)
 
   const saveAsLoginProfile = useCallback(async (recording: RecordingSession) => {
-    const name = prompt('请为登录配置命名（如：管理系统登录）', recording.name)
+    const name = prompt(t.saveLoginPrompt, recording.name)
     if (!name || !name.trim()) return
     try {
       await chrome.runtime.sendMessage({
         type: 'SAVE_LOGIN_PROFILE',
         payload: { id: crypto.randomUUID(), name: name.trim(), steps: recording.steps, createdAt: Date.now(), sourceRecordingId: recording.id },
       })
-      alert(`登录配置 "${name.trim()}" 已保存`)
+      alert(t.loginSaved.replace('{name}', name.trim()))
       loadLoginProfiles()
-    } catch (error) { console.error('Failed to save login profile:', error); alert('保存登录配置失败') }
+    } catch (error) { console.error('Failed to save login profile:', error); alert(t.saveLoginFailed) }
   }, [loadLoginProfiles])
 
   const selectLoginProfile = (recordingId: string, profileId: string) => {
@@ -210,19 +212,19 @@ export default function TestCaseList() {
     try {
       const response: any = await chrome.runtime.sendMessage({
         type: 'GENERATE_SCRIPT',
-        payload: { sessionId: recording.id, framework, loginProfileId: selectedLoginProfileMap.get(recording.id) || '' }
+        payload: { sessionId: recording.id, framework: 'playwright', loginProfileId: selectedLoginProfileMap.get(recording.id) || '' }
       })
       if (response.success) { setScript(response.data.script); setSelectedRecording(recording); loadRecordings() }
       else { alert('生成脚本失败: ' + (response.error || '未知错误')) }
     } catch (error: any) { alert('生成脚本失败: ' + (error?.message || '请检查扩展是否已刷新')) }
     finally { setLoading(false) }
-  }, [framework, loadRecordings, selectedLoginProfileMap])
+  }, [loadRecordings, selectedLoginProfileMap])
 
   const exportJson = useCallback(async (recording: RecordingSession) => {
     try {
       const response: any = await Promise.race([
         chrome.runtime.sendMessage({ type: 'EXPORT_JSON', payload: { sessionId: recording.id, loginProfileId: selectedLoginProfileMap.get(recording.id) || '' } }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('导出超时')), 5000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Export timeout')), 5000))
       ])
       if (response?.success) {
         const filename = response.data?.filename || ''
@@ -244,8 +246,8 @@ export default function TestCaseList() {
         }
 
         const msg = localSaved
-          ? `✅ JSON 已导出到两处:\n  ① 浏览器下载目录: ${filename}\n  ② 本地目录: ${filename}`
-          : `✅ JSON 已导出: ${filename}\n\n请确认 Chrome 下载目录已设为 pytest_automation 工程根目录，或在设置中配置本地导出目录。`
+          ? t.exportSuccessBoth.split('{filename}').join(filename)
+          : t.exportSuccessOne.replace('{filename}', filename)
         alert(msg)
       }
       else { alert('导出 JSON 失败: ' + (response?.error || '未知错误')) }
@@ -287,9 +289,9 @@ export default function TestCaseList() {
 
   const executeRecording = useCallback(async (recording: RecordingSession) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    if (!tab?.id) { alert('请先切换到目标页面标签'); return }
+    if (!tab?.id) { alert(t.switchToTargetTab); return }
     const hasContentScript = await ensureContentScript(tab.id)
-    if (!hasContentScript) { alert('无法注入页面脚本，请刷新页面后重试'); return }
+    if (!hasContentScript) { alert(t.cannotInjectRetry); return }
 
     const firstStep = recording.steps[0]
     if (firstStep?.url && tab.id) {
@@ -323,7 +325,7 @@ export default function TestCaseList() {
         let result: StepExecutionResult = { stepIndex: i, status: 'pending' }
         try {
           const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-          if (!activeTab?.id) throw new Error('无法获取当前标签页')
+          if (!activeTab?.id) throw new Error(t.cannotGetTab)
           const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'EXECUTE_STEP', payload: { step, stepIndex: i, totalSteps: recording.steps.length, speed: 1200 } })
           if (response?.success) {
             successCount++
@@ -367,7 +369,7 @@ export default function TestCaseList() {
   // ========== 辅助函数（原有）==========
   const getStepCount = (recording: RecordingSession) => recording.steps.length
   const actionLabel = (action: string) => {
-    const map: Record<string, string> = { click: '点击', input: '输入', select: '选择', navigate: '跳转', wait: '等待' }
+    const map: Record<string, string> = { click: t.actionClick, input: t.actionInput, select: t.actionSelect, navigate: t.actionNavigate, wait: t.actionWait }
     return map[action] || action
   }
   const getExecutionResults = (recording: RecordingSession): StepExecutionResult[] | null => {
@@ -380,7 +382,7 @@ export default function TestCaseList() {
     if (recording.lastExecution) {
       const { successCount, errorCount } = recording.lastExecution
       const total = successCount + errorCount
-      return errorCount > 0 ? `${total}步: ${successCount}成功, ${errorCount}失败` : `${total}步全部成功`
+      return errorCount > 0 ? t.execSummary.replace('{total}', String(total)).replace('{successCount}', String(successCount)).replace('{errorCount}', String(errorCount)) : t.execAllSuccess.replace('{total}', String(total))
     }
     return null
   }
@@ -410,13 +412,13 @@ export default function TestCaseList() {
     return (
       <div className="flex items-center gap-1 cursor-pointer hover:text-blue-300" key={key} onClick={() => startEdit(key, displayValue)}>
         <span className="text-gray-500 min-w-[3em]">{label}:</span>
-        <span className={`text-gray-300 truncate ${codeStyle ? 'font-mono text-[9px]' : ''} ${!value ? 'text-gray-600 italic' : ''}`}>{displayValue || '(空)'}</span>
+        <span className={`text-gray-300 truncate ${codeStyle ? 'font-mono text-[9px]' : ''} ${!value ? 'text-gray-600 italic' : ''}`}>{displayValue || t.empty}</span>
       </div>
     )
   }
 
   const getActionLabelForLive = (action: string) => {
-    const labels: Record<string, string> = { click: '点击', input: '输入', select: '选择', navigate: '导航', wait: '等待' }
+    const labels: Record<string, string> = { click: t.actionClick, input: t.actionInput, select: t.actionSelect, navigate: t.actionNavigate, wait: t.actionWait }
     return labels[action] || action
   }
 
@@ -441,24 +443,24 @@ export default function TestCaseList() {
         <div className="flex gap-2 mb-2">
           {!isRecording ? (
             <button onClick={startRecording} className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse" /> 开始录制
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse" /> {t.startRecording}
             </button>
           ) : (
-            <button onClick={stopRecording} className="flex-1 py-2 px-3 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs font-medium transition-colors">⏹ 停止录制</button>
+            <button onClick={stopRecording} className="flex-1 py-2 px-3 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs font-medium transition-colors">⏹ {t.stopRecording}</button>
           )}
-          <button onClick={clearSteps} disabled={liveSteps.length === 0} className="py-2 px-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-gray-300 rounded text-xs transition-colors">清空</button>
+          <button onClick={clearSteps} disabled={liveSteps.length === 0} className="py-2 px-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-gray-300 rounded text-xs transition-colors">{t.clearSteps}</button>
         </div>
         {isRecording && (
           <div className="flex items-center gap-2 text-xs text-red-400">
             <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            录制中... 已记录 {liveSteps.length} 个步骤
+            {t.recording} {t.stepsRecorded.replace('{n}', String(liveSteps.length))}
           </div>
         )}
         {liveSessionName && !isRecording && <div className="text-xs text-gray-400 mt-1">最后录制: {liveSessionName}</div>}
         {csError && (
           <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded text-[11px]">
             <p className="text-red-400 mb-1">⚠️ {csError}</p>
-            <button onClick={refreshPage} className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-[10px] transition-colors">🔄 刷新当前页面</button>
+            <button onClick={refreshPage} className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-[10px] transition-colors">🔄 {t.refreshPage}</button>
           </div>
         )}
         {/* 实时步骤预览 */}
@@ -471,7 +473,7 @@ export default function TestCaseList() {
                   <span className="text-gray-500">{new Date(step.timestamp).toLocaleTimeString('zh-CN')}</span>
                 </div>
                 <div className="text-gray-300 truncate">{getTargetSummary(step)}</div>
-                {step.value && <div className="text-gray-400">值: {step.value.length > 20 ? step.value.substring(0, 20) + '...' : step.value}</div>}
+                {step.value && <div className="text-gray-400">{t.value}: {step.value.length > 20 ? step.value.substring(0, 20) + '...' : step.value}</div>}
               </div>
             ))}
           </div>
@@ -481,8 +483,8 @@ export default function TestCaseList() {
       {/* 用例列表头部（原有） */}
       <div className="p-3 border-b border-gray-700 shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-200">测试用例 ({filteredRecordings.length})</h2>
-          <button onClick={loadRecordings} className="text-gray-500 hover:text-gray-300 text-xs p-1" title="刷新">🔄</button>
+          <h2 className="text-sm font-semibold text-gray-200">{t.testCases} ({filteredRecordings.length})</h2>
+          <button onClick={loadRecordings} className="text-gray-500 hover:text-gray-300 text-xs p-1" title={t.refresh}>🔄</button>
         </div>
         {/* 搜索和筛选 */}
         <div className="space-y-2">
@@ -491,7 +493,7 @@ export default function TestCaseList() {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="🔍 搜索用例名称..."
+              placeholder={`🔍 ${t.searchPlaceholder}`}
               className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-[10px] text-gray-300 placeholder-gray-500 outline-none focus:border-blue-500"
             />
             {searchQuery && (
@@ -504,7 +506,7 @@ export default function TestCaseList() {
               onChange={e => setFilterUrl(e.target.value)}
               className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-[10px] text-gray-300 outline-none focus:border-blue-500"
             >
-              <option value="">📍 全部页面 URL</option>
+              <option value="">📍 {t.allUrls}</option>
               {allUrls.map(url => (
                 <option key={url} value={url}>{url.replace(/^https?:\/\//, '').substring(0, 40)}{url.replace(/^https?:\/\//, '').length > 40 ? '...' : ''}</option>
               ))}
@@ -514,12 +516,7 @@ export default function TestCaseList() {
             )}
           </div>
         </div>
-        <div className="mt-2">
-          <select value={framework} onChange={e => setFramework(e.target.value as 'playwright' | 'selenium')} className="bg-gray-900 border border-gray-600 rounded px-2 py-1 text-[10px] text-gray-300 outline-none focus:border-blue-500">
-            <option value="playwright">Playwright</option>
-            <option value="selenium">Selenium</option>
-          </select>
-        </div>
+
       </div>
 
       {/* 用例列表（原有扁平列表） */}
@@ -527,8 +524,8 @@ export default function TestCaseList() {
         {filteredRecordings.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 text-xs">
             <span className="text-2xl mb-2">📋</span>
-            <p>{searchQuery || filterUrl ? '没有匹配的用例' : '暂无录制用例'}</p>
-            <p className="mt-1">{searchQuery || filterUrl ? '请调整搜索条件' : '点击上方"开始录制"在页面上操作'}</p>
+            <p>{searchQuery || filterUrl ? t.noMatch : t.noCases}</p>
+            <p className="mt-1">{searchQuery || filterUrl ? t.noMatchHint : t.noCasesHint}</p>
           </div>
         ) : (
           <div className="space-y-2 p-2">
@@ -541,9 +538,9 @@ export default function TestCaseList() {
                 <div key={recording.id} className={`rounded border transition-colors ${selectedRecording?.id === recording.id ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-gray-700 hover:border-gray-600'}`}>
                   <div className="p-2">
                     <div className="flex items-center justify-between mb-1">
-                      {renderEditableField(recording.id, null, 'name', '名称', recording.name)}
+                      {renderEditableField(recording.id, null, 'name', t.name, recording.name)}
                       <div className="flex items-center gap-1 ml-2">
-                        <button onClick={() => executeRecording(recording)} disabled={executing} className={`text-[10px] px-2 py-0.5 rounded text-white transition-colors ${isExecutingThis ? 'bg-green-600 animate-pulse' : 'bg-green-700 hover:bg-green-600 disabled:opacity-50'}`} title="执行用例">{isExecutingThis ? '▶' : '▶ 执行'}</button>
+                        <button onClick={() => executeRecording(recording)} disabled={executing} className={`text-[10px] px-2 py-0.5 rounded text-white transition-colors ${isExecutingThis ? 'bg-green-600 animate-pulse' : 'bg-green-700 hover:bg-green-600 disabled:opacity-50'}`} title={t.execute}>{isExecutingThis ? '▶' : `▶ ${t.execute}`}</button>
                         <button onClick={() => saveAsLoginProfile(recording)} className="text-gray-500 hover:text-blue-400 text-[10px]" title="保存为登录配置">💾</button>
                         <button onClick={() => deleteRecording(recording.id)} className="text-blue-400 hover:text-blue-300 text-[10px]" title="删除用例">🗑</button>
                       </div>
@@ -563,11 +560,11 @@ export default function TestCaseList() {
                       </div>
                     )}
                     <div className="flex gap-1">
-                      <button onClick={() => generateScript(recording)} disabled={loading || executing} className="flex-1 py-1 px-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded text-[10px] transition-colors">{loading && selectedRecording?.id === recording.id ? '生成中...' : '生成脚本'}</button>
-                      <button onClick={() => exportJson(recording)} disabled={executing} className="flex-1 py-1 px-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded text-[10px] transition-colors">JSON自动化配置下载</button>
-                      {recording.generatedScript && <button onClick={() => { setScript(recording.generatedScript!); setSelectedRecording(recording) }} className="py-1 px-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-[10px] transition-colors">查看</button>}
+                      <button onClick={() => generateScript(recording)} disabled={loading || executing} className="flex-1 py-1 px-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded text-[10px] transition-colors">{loading && selectedRecording?.id === recording.id ? t.generating : t.generateScript}</button>
+                      <button onClick={() => exportJson(recording)} disabled={executing} className="flex-1 py-1 px-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded text-[10px] transition-colors">{t.exportJSON}</button>
+                      {recording.generatedScript && <button onClick={() => { setScript(recording.generatedScript!); setSelectedRecording(recording) }} className="py-1 px-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-[10px] transition-colors">{t.view}</button>}
                     </div>
-                    <button onClick={() => toggleExpand(recording.id)} className="w-full mt-1 text-[10px] text-gray-500 hover:text-gray-300 py-1 text-center">{isExpanded ? '▲ 收起详情' : '▼ 展开步骤详情'}</button>
+                    <button onClick={() => toggleExpand(recording.id)} className="w-full mt-1 text-[10px] text-gray-500 hover:text-gray-300 py-1 text-center">{isExpanded ? `▲ ${t.collapseDetails}` : `▼ ${t.expandDetails}`}</button>
                   </div>
                   {isExpanded && (
                     <div className="border-t border-gray-700 p-2">
@@ -591,14 +588,14 @@ export default function TestCaseList() {
                                 {!isExecutingThis && <button onClick={() => deleteStep(recording.id, step.id)} className="text-gray-600 hover:text-red-400 ml-1" title="删除步骤">✕</button>}
                               </div>
                               <div className="pl-4 space-y-0.5">
-                                {renderEditableField(recording.id, step.id, 'selector', '选择器', step.target.selector, true)}
+                                {renderEditableField(recording.id, step.id, 'selector', t.selector, step.target.selector, true)}
                                 {renderEditableField(recording.id, step.id, 'xpath', 'XPath', step.target.xpath, true)}
-                                {step.value !== undefined && renderEditableField(recording.id, step.id, 'value', '值', step.value, true)}
-                                {renderEditableField(recording.id, step.id, 'text', '文本', step.target.text)}
-                                {renderEditableField(recording.id, step.id, 'aria', 'ARIA', step.target.aria)}
-                                {renderEditableField(recording.id, step.id, 'url', '页面', step.url)}
+                                {step.value !== undefined && renderEditableField(recording.id, step.id, 'value', t.value, step.value, true)}
+                                {renderEditableField(recording.id, step.id, 'text', t.text, step.target.text)}
+                                {renderEditableField(recording.id, step.id, 'aria', t.ariaLabel, step.target.aria)}
+                                {renderEditableField(recording.id, step.id, 'url', t.pageLabel, step.url)}
                               </div>
-                              {result?.message && status === 'error' && <div className="mt-1 pl-4 text-red-400 text-[10px] break-all border-t border-red-900/30 pt-1">错误: {result.message}</div>}
+                              {result?.message && status === 'error' && <div className="mt-1 pl-4 text-red-400 text-[10px] break-all border-t border-red-900/30 pt-1">{t.errorLabel} {result.message}</div>}
                             </div>
                           )
                         })}

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { AIMessage, AIConfig, ToolDefinition, ToolCall, ToolResult, TestStep } from '../../shared/types'
 import { ChatSession, getChatSessions, saveChatSession, deleteChatSession, getActiveSessionId, setActiveSessionId as saveActiveSessionId, generateSessionTitle } from '../../storage/chat'
+import { useI18n } from '../../i18n/I18nContext'
 
 // ═══════════════════════════════════════════════════════════════
 //  工具定义（Function Calling Schema）
@@ -217,7 +218,7 @@ async function getActiveTabId(): Promise<number | null> {
 //  工具执行分发
 // ═══════════════════════════════════════════════════════════════
 
-async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
+async function executeTool(toolCall: ToolCall, t: any): Promise<ToolResult> {
   const { name } = toolCall.function
   let args: any = {}
   try {
@@ -229,9 +230,9 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
   try {
     switch (name) {
       case 'get_page_info': {
-        if (!tabId) return { success: false, error: '无活动标签页' }
+        if (!tabId) return { success: false, error: t.noActiveTab }
         const injected = await ensureContentScript(tabId)
-        if (!injected) return { success: false, error: '无法注入页面脚本' }
+        if (!injected) return { success: false, error: t.cannotInjectScript }
         const result = await chrome.tabs.sendMessage(tabId, {
           type: 'GET_PAGE_CONTEXT',
           payload: { maxElements: args.maxElements || 30 }
@@ -266,17 +267,17 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
       }
 
       case 'execute_recording': {
-        if (!tabId) return { success: false, error: '无活动标签页' }
+        if (!tabId) return { success: false, error: t.noActiveTab }
         const recordings: any[] = await chrome.runtime.sendMessage({ type: 'GET_RECORDINGS' })
         const recording = recordings.find(r =>
           (args.recording_id && r.id === args.recording_id) ||
           (args.recording_name && r.name === args.recording_name)
         )
-        if (!recording) return { success: false, error: `未找到录制用例: ${args.recording_id || args.recording_name}` }
-        if (!recording.steps?.length) return { success: false, error: '该用例没有步骤' }
+        if (!recording) return { success: false, error: `${t.recordingNotFound}: ${args.recording_id || args.recording_name}` }
+        if (!recording.steps?.length) return { success: false, error: t.noSteps }
 
         const hasContentScript = await ensureContentScript(tabId)
-        if (!hasContentScript) return { success: false, error: '无法注入页面脚本' }
+        if (!hasContentScript) return { success: false, error: t.cannotInjectScript }
 
         // 强制导航到起始 URL
         const firstStep = recording.steps[0]
@@ -298,16 +299,16 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
         for (let i = 0; i < recording.steps.length; i++) {
           try {
             const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-            if (!activeTab?.id) throw new Error('无法获取当前标签页')
+            if (!activeTab?.id) throw new Error(t.cannotGetTab)
             const resp = await chrome.tabs.sendMessage(activeTab.id, {
               type: 'EXECUTE_STEP',
               payload: { step: recording.steps[i], stepIndex: i, totalSteps: recording.steps.length, speed: 1200 }
             })
             if (resp?.success) successCount++
-            else throw new Error(resp?.error || '执行失败')
+            else throw new Error(resp?.error || t.executionFailedShort)
           } catch (err: any) {
             errorCount++
-            errors.push(`步骤${i + 1}: ${err.message}`)
+            errors.push(t.stepFailed.replace('{i}', String(i + 1)).replace('{error}', err.message))
           }
           await new Promise(r => setTimeout(r, 300))
         }
@@ -319,7 +320,7 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
       }
 
       case 'generate_script': {
-        if (!args.recording_id) return { success: false, error: '缺少 recording_id 参数' }
+        if (!args.recording_id) return { success: false, error: t.missingRecordingId }
         const script = await chrome.runtime.sendMessage({
           type: 'GENERATE_SCRIPT',
           payload: {
@@ -332,7 +333,7 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
       }
 
       case 'export_json': {
-        if (!args.recording_id) return { success: false, error: '缺少 recording_id 参数' }
+        if (!args.recording_id) return { success: false, error: t.missingRecordingId }
         const result = await chrome.runtime.sendMessage({
           type: 'EXPORT_JSON',
           payload: { sessionId: args.recording_id }
@@ -341,24 +342,24 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
       }
 
       case 'highlight_element': {
-        if (!tabId) return { success: false, error: '无活动标签页' }
+        if (!tabId) return { success: false, error: t.noActiveTab }
         const injected = await ensureContentScript(tabId)
-        if (!injected) return { success: false, error: '无法注入页面脚本' }
+        if (!injected) return { success: false, error: t.cannotInjectScript }
         const result = await chrome.tabs.sendMessage(tabId, {
           type: 'HIGHLIGHT_ELEMENT',
           payload: {
             selector: args.selector,
             xpath: args.xpath,
-            label: args.label || '高亮元素'
+            label: args.label || t.toolNameHighlight
           }
         })
         return { success: result?.success || false, data: result }
       }
 
       case 'click_element': {
-        if (!tabId) return { success: false, error: '无活动标签页' }
+        if (!tabId) return { success: false, error: t.noActiveTab }
         const hasCS = await ensureContentScript(tabId)
-        if (!hasCS) return { success: false, error: '无法注入页面脚本' }
+        if (!hasCS) return { success: false, error: t.cannotInjectScript }
         const step: TestStep = {
           id: `ai-click-${Date.now()}`,
           action: 'click',
@@ -378,9 +379,9 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
       }
 
       case 'input_text': {
-        if (!tabId) return { success: false, error: '无活动标签页' }
+        if (!tabId) return { success: false, error: t.noActiveTab }
         const hasCS = await ensureContentScript(tabId)
-        if (!hasCS) return { success: false, error: '无法注入页面脚本' }
+        if (!hasCS) return { success: false, error: t.cannotInjectScript }
         const step: TestStep = {
           id: `ai-input-${Date.now()}`,
           action: 'input',
@@ -400,15 +401,15 @@ async function executeTool(toolCall: ToolCall): Promise<ToolResult> {
       }
 
       case 'navigate_to': {
-        if (!tabId) return { success: false, error: '无活动标签页' }
-        if (!args.url) return { success: false, error: '缺少 url 参数' }
+        if (!tabId) return { success: false, error: t.noActiveTab }
+        if (!args.url) return { success: false, error: t.missingUrlParam }
         await chrome.tabs.update(tabId, { url: args.url })
         await new Promise(r => setTimeout(r, 3000))
         return { success: true, data: { navigatedTo: args.url } }
       }
 
       default:
-        return { success: false, error: `未知工具: ${name}` }
+        return { success: false, error: t.unknownTool.replace('{name}', name) }
     }
   } catch (error: any) {
     return { success: false, error: error.message || String(error) }
@@ -532,11 +533,12 @@ function parseDsmlToolCalls(content: string): ToolCall[] | undefined {
 async function callAI(
   apiMessages: any[],
   config: AIConfig,
-  enableTools: boolean
+  enableTools: boolean,
+  t: any
 ): Promise<{ content: string | null; tool_calls?: ToolCall[] }> {
   const baseURL = config.baseURL?.replace(/\/$/, '')
   if (!baseURL) {
-    throw new Error('Base URL 未配置，请先在设置中选择提供商或手动填写 Base URL')
+    throw new Error(t.baseUrlNotConfigured)
   }
   const apiKey = config.apiKey
   const model = config.model || 'gpt-4o'
@@ -569,7 +571,7 @@ async function callAI(
 
   const json = await response.json()
   const choice = json.choices?.[0]?.message
-  if (!choice) throw new Error('API 返回空消息')
+  if (!choice) throw new Error(t.apiEmptyResponse)
 
   // 标准 OpenAI function calling 格式
   if (choice.tool_calls && choice.tool_calls.length > 0) {
@@ -600,11 +602,12 @@ async function callAIStream(
   apiMessages: any[],
   config: AIConfig,
   onChunk: (text: string) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  t: any
 ): Promise<string> {
   const baseURL = config.baseURL?.replace(/\/$/, '')
   if (!baseURL) {
-    throw new Error('Base URL 未配置，请先在设置中选择提供商或手动填写 Base URL')
+    throw new Error(t.baseUrlNotConfigured)
   }
   const apiKey = config.apiKey
   const model = config.model || 'gpt-4o'
@@ -661,7 +664,7 @@ async function callAIStream(
     }
   }
 
-  return fullContent || '（无返回内容）'
+  return fullContent || t.noContent
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -669,6 +672,7 @@ async function callAIStream(
 // ═══════════════════════════════════════════════════════════════
 
 export default function AIChatPanel() {
+  const { t } = useI18n()
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -744,7 +748,7 @@ export default function AIChatPanel() {
     }
     const newSession: ChatSession = {
       id: `session-${Date.now()}`,
-      title: '新会话',
+      title: t.newSessionFallback,
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -796,74 +800,12 @@ export default function AIChatPanel() {
   }
 
   const buildLLMSystemPrompt = useCallback((): string => {
-    return `你是一位资深的软件测试工程师和技术顾问。你的职责是：
-1. 解答软件测试、自动化测试、pytest、Playwright、Selenium 等相关技术问题
-2. 分析当前页面功能，识别测试点和风险，输出结构化的功能分析
-3. 基于页面信息设计完整的功能测试用例（含正向/反向/边界场景）
-4. 从产品体验角度提出优化建议（交互、文案、性能、可访问性等）
-5. review 测试代码，指出问题和改进点
-6. 讲解测试框架的使用方法和最佳实践
-
-【页面分析能力】
-当用户要求分析页面时，请基于提供的页面上下文信息，输出：
-- 页面核心功能模块划分
-- 每个模块的可测试点（功能、边界、异常）
-- 推荐的测试优先级
-
-【用例设计能力】
-当用户要求设计测试用例时，请输出结构化的测试用例表格或列表，包含：
-- 用例编号、标题、前置条件、测试步骤、预期结果、优先级
-
-【优化建议能力】
-当用户要求优化建议时，请从产品体验、技术实现、测试可测性等角度提出具体建议。
-
-你有完整的对话上下文记忆，可以基于之前的讨论继续深入。
-
-请用中文回答。代码块使用 Python 语法高亮。`
-  }, [])
+    return t.llmSystemPrompt
+  }, [t.llmSystemPrompt])
 
   const buildAgentSystemPrompt = useCallback((): string => {
-    return `你是一位专业的软件测试工程师和 Chrome 扩展 AI Agent。你具备以下能力：
-1. 分析当前网页结构，识别测试点和风险
-2. 直接操作页面元素（点击、输入文本、导航），无需录制即可实时执行
-3. 录制用户操作并生成自动化测试脚本
-4. 直接执行已录制的测试用例
-5. 高亮页面元素辅助定位问题
-6. 与用户进行多轮自然语言对话，解答测试相关问题
-
-【上下文记忆】
-你有完整的对话上下文记忆。之前的所有用户消息、工具调用记录和工具返回结果都保存在上下文中。你可以基于历史记录回答用户的问题，比如"你刚才做了什么"、"为什么这样操作"等。
-
-【什么时候调用工具】
-只有在用户明确要求"操作页面"、"点击"、"输入"、"搜索"、"执行"、"导航"、"高亮"、"录制"、"生成脚本"、"导出"时，才调用工具。
-
-【什么时候不调用工具】
-以下情况直接用语言回复，禁止调用任何工具：
-- 用户提问、质疑、询问原因（如"为什么"、"怎么回事"、"你怎么做到的"）
-- 用户闲聊、打招呼、表达情绪
-- 用户要求解释、分析、建议
-- 用户说"不用了"、"停"、"先别操作"
-- 你不确定用户意图时——先询问确认，而不是擅自操作
-
-【操作页面的正确流程】
-1. 先调用 get_page_info 获取页面结构和元素列表
-2. 根据返回的元素 xpath/selector，调用 click_element 或 input_text 执行操作
-3. 如果操作失败，尝试用 text 属性模糊匹配，或高亮元素辅助定位
-
-当前支持的工具：
-- get_page_info：获取页面详细信息
-- click_element：直接点击页面元素
-- input_text：直接在输入框输入文本
-- navigate_to：导航到指定 URL
-- start_recording / stop_recording：控制录制
-- get_recordings：查看已有用例
-- execute_recording：执行已有用例
-- generate_script：生成 Python 脚本
-- export_json：导出 pytest JSON 配置
-- highlight_element：高亮页面元素
-
-请用中文回答。代码块使用 Python 语法高亮。`
-  }, [])
+    return t.agentSystemPrompt
+  }, [t.agentSystemPrompt])
 
   // 判断用户消息是否为纯对话（不需要调用工具）
   const isChatOnly = (text: string): boolean => {
@@ -962,7 +904,8 @@ export default function AIChatPanel() {
           apiMessages,
           config,
           (text) => setStreamingContent(text),
-          abortRef.current.signal
+          abortRef.current.signal,
+          t
         )
 
         const assistantMsg: AIMessage = {
@@ -979,7 +922,7 @@ export default function AIChatPanel() {
         let loopCount = 0
 
         while (loopCount < maxLoops) {
-          const response = await callAI(apiMessages, config, enableToolsForThisTurn)
+          const response = await callAI(apiMessages, config, enableToolsForThisTurn, t)
 
           const assistantMsg: AIMessage = {
             id: `${Date.now()}-assistant-${loopCount}`,
@@ -1000,7 +943,7 @@ export default function AIChatPanel() {
             setActiveTools(toolNames)
 
             for (const toolCall of response.tool_calls) {
-              const toolResult = await executeTool(toolCall)
+              const toolResult = await executeTool(toolCall, t)
               const toolResultMsg: AIMessage = {
                 id: `${Date.now()}-tool-${toolCall.id}`,
                 role: 'tool',
@@ -1029,7 +972,7 @@ export default function AIChatPanel() {
           setMessages(prev => [...prev, {
             id: `${Date.now()}-system`,
             role: 'assistant',
-            content: '⚠️ 单次回复中工具调用轮数已达上限（50轮）。你可以继续发送新消息，我会基于当前状态继续操作。',
+            content: t.toolLimitReached,
             timestamp: Date.now(),
           }])
         }
@@ -1078,9 +1021,9 @@ export default function AIChatPanel() {
   const handleQuickAction = (type: 'analyze' | 'testcases' | 'optimize') => {
     if (loading) return
     const prompts: Record<string, string> = {
-      analyze: '请分析当前页面的功能模块，列出每个模块的核心功能、可测试点和风险点。输出结构化的分析结果。',
-      testcases: '请基于当前页面信息，设计一套完整的功能测试用例。包含正向场景、反向场景、边界条件。请以表格形式输出，每行包含：用例编号、模块、标题、前置条件、测试步骤、预期结果、优先级（P0/P1/P2）。',
-      optimize: '请从以下角度分析当前页面，提出具体的产品优化建议：\n1. 交互体验（操作流程是否顺畅、是否有歧义）\n2. 文案与提示（是否有误导、是否完整）\n3. 可访问性（表单验证、错误提示、加载状态）\n4. 测试可测性（元素定位是否稳定、是否有唯一标识）\n请输出结构化的优化建议，每条建议包含：问题描述、影响、具体改进方案。',
+      analyze: t.quickAnalyzePrompt,
+      testcases: t.quickTestcasesPrompt,
+      optimize: t.quickOptimizePrompt,
     }
     const userText = prompts[type]
     setMessages(prev => [...prev, {
@@ -1105,18 +1048,21 @@ export default function AIChatPanel() {
   }
 
   // 工具名中文映射
-  const toolNameCN: Record<string, string> = {
-    get_page_info: '获取页面信息',
-    click_element: '点击元素',
-    input_text: '输入文本',
-    navigate_to: '页面导航',
-    start_recording: '开始录制',
-    stop_recording: '停止录制',
-    get_recordings: '获取用例列表',
-    execute_recording: '执行录制用例',
-    generate_script: '生成测试脚本',
-    export_json: '导出JSON配置',
-    highlight_element: '高亮页面元素',
+  const getToolName = (name: string) => {
+    const map: Record<string, string> = {
+      get_page_info: t.toolNameGetPageInfo,
+      click_element: t.toolNameClick,
+      input_text: t.toolNameInput,
+      navigate_to: t.toolNameNavigate,
+      start_recording: t.toolNameStartRecording,
+      stop_recording: t.toolNameStopRecording,
+      get_recordings: t.toolNameGetRecordings,
+      execute_recording: t.toolNameExecuteRecording,
+      generate_script: t.toolNameGenerateScript,
+      export_json: t.toolNameExportJson,
+      highlight_element: t.toolNameHighlight,
+    }
+    return map[name] || name
   }
 
   return (
@@ -1138,7 +1084,7 @@ export default function AIChatPanel() {
                 : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
             }`}
           >
-            💬 LLM 对话
+            {t.llmChatLabel}
           </button>
           <button
             onClick={() => {
@@ -1153,7 +1099,7 @@ export default function AIChatPanel() {
                 : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
             }`}
           >
-            🛠 Agent 对话
+            {t.agentChatLabel}
           </button>
         </div>
 
@@ -1163,10 +1109,10 @@ export default function AIChatPanel() {
             <button
               onClick={() => setShowSessionList(!showSessionList)}
               className="flex items-center gap-1 text-[11px] font-medium text-gray-300 truncate hover:text-white transition-colors"
-              title="切换会话"
+              title={t.switchSession}
             >
               <span className="truncate">
-                {sessions.find(s => s.id === activeSessionId)?.title || '新会话'}
+                {sessions.find(s => s.id === activeSessionId)?.title || t.newSessionFallback}
               </span>
               <span className="text-[9px]">{showSessionList ? '▲' : '▼'}</span>
             </button>
@@ -1176,13 +1122,13 @@ export default function AIChatPanel() {
           <div className="flex items-center gap-1 shrink-0">
             {isAgentMode && activeTools.length > 0 && (
               <span className="text-[9px] text-yellow-400 animate-pulse truncate max-w-[100px]">
-                🔧 {activeTools.map(t => toolNameCN[t] || t).join(', ')}
+                🔧 {activeTools.map(t => getToolName(t)).join(', ')}
               </span>
             )}
             <button
               onClick={() => createNewSession(true)}
               className="text-[10px] text-blue-400 hover:text-blue-300 px-1 py-0.5"
-              title="新建会话"
+              title={t.createNewSession}
             >
               ＋
             </button>
@@ -1220,7 +1166,7 @@ export default function AIChatPanel() {
                 <button
                   onClick={(e) => deleteSession(session.id, e)}
                   className="text-gray-600 hover:text-red-400 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="删除"
+                  title={t.deleteSession}
                 >
                   🗑
                 </button>
@@ -1238,24 +1184,13 @@ export default function AIChatPanel() {
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 text-xs">
             <span className="text-2xl mb-2">🤖</span>
-            <p className="font-medium">{isAgentMode ? '🛠 Agent 测试助手' : '💬 LLM 测试顾问'}</p>
-            <p className="mt-1 text-[10px]">{isAgentMode ? '我可以调用工具直接操作页面、执行录制' : '纯对话模式，解答测试技术问题'}</p>
+            <p className="font-medium">{isAgentMode ? t.agentWelcomeTitle : t.llmWelcomeTitle}</p>
+            <p className="mt-1 text-[10px]">{isAgentMode ? t.agentWelcomeSubtitle : t.llmWelcomeSubtitle}</p>
             <div className="mt-4 space-y-1 text-[10px] text-gray-600">
-              {isAgentMode ? (
-                <>
-                  <p>• "分析当前页面有哪些测试点"</p>
-                  <p>• "点击左侧菜单的系统信息"</p>
-                  <p>• "在搜索框输入自动化并搜索"</p>
-                  <p>• "执行上次录制的登录用例"</p>
-                </>
-              ) : (
-                <>
-                  <p>• "pytest 怎么参数化测试用例？"</p>
-                  <p>• "Playwright 和 Selenium 有什么区别？"</p>
-                  <p>• "帮我 review 这段测试代码"</p>
-                  <p>• "设计一个登录功能的测试用例"</p>
-                </>
-              )}
+              <p>• {t.welcomeExample1}</p>
+              <p>• {t.welcomeExample2}</p>
+              <p>• {t.welcomeExample3}</p>
+              <p>• {t.welcomeExample4}</p>
             </div>
             {!isAgentMode && (
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
@@ -1264,21 +1199,21 @@ export default function AIChatPanel() {
                   disabled={loading}
                   className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 disabled:opacity-50 border border-blue-600/40 text-blue-400 rounded text-[10px] transition-colors"
                 >
-                  📋 分析当前页面功能
+                  📋 {t.quickAnalyze}
                 </button>
                 <button
                   onClick={() => handleQuickAction('testcases')}
                   disabled={loading}
                   className="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 disabled:opacity-50 border border-green-600/40 text-green-400 rounded text-[10px] transition-colors"
                 >
-                  📝 生成功能测试用例
+                  📝 {t.quickTestcases}
                 </button>
                 <button
                   onClick={() => handleQuickAction('optimize')}
                   disabled={loading}
                   className="px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/30 disabled:opacity-50 border border-orange-600/40 text-orange-400 rounded text-[10px] transition-colors"
                 >
-                  💡 产品优化建议
+                  💡 {t.quickOptimize}
                 </button>
               </div>
             )}
@@ -1311,7 +1246,7 @@ export default function AIChatPanel() {
                     <div className="flex items-center gap-1 mb-1">
                       <span className="text-[9px]">{isSuccess ? '✅' : '❌'}</span>
                       <span className="font-medium text-[9px] text-gray-400">
-                        工具: {toolNameCN[msg.tool_name || ''] || msg.tool_name}
+                        工具: {getToolName(msg.tool_name || '')}
                       </span>
                     </div>
                     <div className="font-mono text-[9px] whitespace-pre-wrap break-all opacity-80">
@@ -1342,16 +1277,16 @@ export default function AIChatPanel() {
                         exportTableToCSV(tableRows, `${safeName}_${Date.now()}.csv`)
                       }}
                       className="mt-2 px-2 py-0.5 bg-green-700/40 hover:bg-green-600/60 text-green-300 rounded text-[9px] transition-colors"
-                      title="导出表格为 CSV"
+                      title={t.exportCSVTitle}
                     >
-                      📥 可导出 Excel
+                      📥 {t.exportCSV}
                     </button>
                   )}
                   {hasToolCalls ? (
                     <div className="flex items-center gap-1.5">
                       <span className="animate-spin text-xs">⚙️</span>
                       <span className="text-[10px]">
-                        正在调用工具: {msg.tool_calls!.map(tc => toolNameCN[tc.function.name] || tc.function.name).join(', ')}
+                        正在调用工具: {msg.tool_calls!.map(tc => getToolName(tc.function.name)).join(', ')}
                       </span>
                     </div>
                   ) : (
@@ -1402,7 +1337,7 @@ export default function AIChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isAgentMode ? '输入指令，AI 将自主调用工具...' : '输入问题...'}
+            placeholder={isAgentMode ? '' : t.sendHint}
             rows={2}
             className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none resize-none focus:border-blue-500"
           />

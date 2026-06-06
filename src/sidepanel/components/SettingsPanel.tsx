@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { AIConfig, ExportConfig, LoginProfile, RecordingSession } from '../../shared/types'
 import { getLocalExportDir, saveLocalExportDir, clearLocalExportDir } from '../../storage/local-export'
+import { useI18n } from '../../i18n/I18nContext'
 
 export default function SettingsPanel() {
+  const { t, lang, toggleLang } = useI18n()
   const [config, setConfig] = useState<AIConfig>({
     provider: 'openai',
     apiKey: '',
@@ -149,12 +151,12 @@ export default function SettingsPanel() {
   const executeLoginProfile = async (profile: LoginProfile) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) {
-      alert('请先切换到目标页面标签')
+      alert(t.switchToTargetTab)
       return
     }
     const hasContentScript = await ensureContentScript(tab.id)
     if (!hasContentScript) {
-      alert('无法注入页面脚本，请刷新页面后重试')
+      alert(t.cannotInjectRetry)
       return
     }
 
@@ -165,7 +167,7 @@ export default function SettingsPanel() {
         payload: { steps: profile.steps, speed: 1200 }
       })
       if (response?.success) {
-        alert(`登录配置 "${profile.name}" 执行成功`)
+        alert(t.loginSaved.replace('{name}', profile.name))
       } else {
         alert('执行失败: ' + (response?.error || '未知错误'))
       }
@@ -177,7 +179,7 @@ export default function SettingsPanel() {
   }
 
   const actionLabel = (action: string) => {
-    const map: Record<string, string> = { click: '点击', input: '输入', select: '选择', navigate: '跳转', wait: '等待' }
+    const map: Record<string, string> = { click: t.actionClick, input: t.actionInput, select: t.actionSelect, navigate: t.actionNavigate, wait: t.actionWait }
     return map[action] || action
   }
 
@@ -227,15 +229,15 @@ export default function SettingsPanel() {
     <div className="flex flex-col h-full overflow-y-auto scrollbar-thin p-3">
       {/* ====== 登录配置档案 ====== */}
       <h2 className="text-xs font-medium text-gray-300 mb-3">
-        登录配置档案 ({loginProfiles.length})
+        {t.loginProfilesCount.replace('{n}', String(loginProfiles.length))}
       </h2>
       <p className="text-[10px] text-gray-500 mb-2">
-        在"用例"标签页点击用例右侧的 🔒 图标即可保存为登录配置。保存后该用例会移至此区域管理。
+        {t.loginProfilesHint}
       </p>
 
       {loginProfiles.length === 0 ? (
         <div className="text-[10px] text-gray-600 mb-4 p-2 bg-gray-800 rounded border border-gray-700">
-          暂无登录配置，去"用例"标签页录制登录流程后点击 🔒 保存
+          {t.noLoginProfilesHint}
         </div>
       ) : (
         <div className="space-y-2 mb-4">
@@ -253,7 +255,7 @@ export default function SettingsPanel() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
                       <span className="shrink-0 px-1.5 py-0.5 bg-blue-600 text-white rounded text-[9px]">
-                        登录配置
+                        {t.loginConfigLabel}
                       </span>
                       <span className="text-xs font-medium text-blue-300 truncate">
                         {profile.name}
@@ -268,14 +270,14 @@ export default function SettingsPanel() {
                             ? 'bg-green-600 animate-pulse'
                             : 'bg-green-700 hover:bg-green-600'
                         }`}
-                        title="执行登录配置"
+                        title={t.executeProfile}
                       >
-                        {executingProfileId === profile.id ? '▶ 执行中...' : '▶ 执行'}
+                        {executingProfileId === profile.id ? t.executingShort : `▶ ${t.executeProfile}`}
                       </button>
                       <button
                         onClick={() => deleteProfile(profile.id)}
                         className="text-blue-400 hover:text-blue-300 text-[10px]"
-                        title="删除"
+                        title={t.deleteTitle}
                       >
                         🗑
                       </button>
@@ -290,7 +292,7 @@ export default function SettingsPanel() {
                   )}
 
                   <div className="flex items-center justify-between text-[10px] text-gray-500">
-                    <span>{profile.steps.length} 个步骤</span>
+                    <span>{profile.steps.length}{t.stepsLabel}</span>
                     <span>{new Date(profile.createdAt).toLocaleDateString('zh-CN')}</span>
                   </div>
 
@@ -299,7 +301,7 @@ export default function SettingsPanel() {
                     onClick={() => toggleExpand(profile.id)}
                     className="w-full mt-1 text-[10px] text-gray-500 hover:text-gray-300 py-1 text-center"
                   >
-                    {isExpanded ? '▲ 收起步骤' : '▼ 展开步骤'}
+                    {isExpanded ? t.collapseSteps : t.expandSteps}
                   </button>
                 </div>
 
@@ -351,8 +353,21 @@ export default function SettingsPanel() {
 
       <div className="border-t border-gray-700 mb-4" />
 
+      {/* ====== 语言切换 ====== */}
+      <h2 className="text-xs font-medium text-gray-300 mb-3">{t.settingsTitle}</h2>
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-[10px] text-gray-400">Language / 语言</span>
+        <button
+          onClick={toggleLang}
+          className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-[10px] transition-colors"
+        >
+          {lang === 'zh' ? '🇨🇳 中文' : '🇺🇸 English'}
+        </button>
+      </div>
+      <div className="border-t border-gray-700 mb-4" />
+
       {/* ====== 导出配置 ====== */}
-      <h2 className="text-xs font-medium text-gray-300 mb-3">导出配置</h2>
+      <h2 className="text-xs font-medium text-gray-300 mb-3">{t.exportConfig}</h2>
 
       <div className="mb-4 flex items-center gap-2">
         <input
@@ -363,57 +378,59 @@ export default function SettingsPanel() {
           className="w-3 h-3 accent-blue-500"
         />
         <label htmlFor="autoOverwrite" className="text-[10px] text-gray-400 cursor-pointer">
-          导出时自动覆盖同名文件
+          {t.autoOverwrite}
         </label>
       </div>
 
       {/* 本地导出目录 */}
       <div className="mb-3">
-        <label className="block text-[10px] text-gray-400 mb-1">本地导出目录（可选）</label>
+        <label className="block text-[10px] text-gray-400 mb-1">{t.localExportDir}</label>
         {localDirName ? (
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-green-400">📁 {localDirName}</span>
-            <button onClick={removeLocalDir} className="text-[10px] text-red-400 hover:text-red-300">移除</button>
+            <button onClick={removeLocalDir} className="text-[10px] text-red-400 hover:text-red-300">{t.removeDir}</button>
           </div>
         ) : (
           <button
             onClick={selectLocalDir}
             className="text-[10px] px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
           >
-            📂 选择本地导出目录
+            📂 {t.selectLocalDir}
           </button>
         )}
         <p className="text-[10px] text-gray-600 mt-1">
-          选择后，导出 JSON 时将同时保存到该本地目录和浏览器下载目录。
+          {t.localExportHint}
         </p>
       </div>
 
       <div className="border-t border-gray-700 mb-4" />
 
+      <div className="border-t border-gray-700 mb-4" />
+
       {/* ====== AI 配置 ====== */}
-      <h2 className="text-xs font-medium text-gray-300 mb-3">AI 配置</h2>
+      <h2 className="text-xs font-medium text-gray-300 mb-3">{t.aiConfig}</h2>
 
       {/* Provider */}
       <div className="mb-3">
-        <label className="block text-[10px] text-gray-400 mb-1">提供商</label>
+        <label className="block text-[10px] text-gray-400 mb-1">{t.provider}</label>
         <select
           value={config.provider}
           onChange={(e) => handleProviderChange(e.target.value as AIConfig['provider'])}
           className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-[11px] text-gray-200 outline-none focus:border-blue-500"
         >
-          <option value="openai">OpenAI (GPT-4o)</option>
-          <option value="claude">Anthropic (Claude)</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="zhipu">智谱 AI (GLM)</option>
-          <option value="kimi">Kimi (Moonshot)</option>
-          <option value="codex">OpenAI Codex</option>
-          <option value="custom">自定义 (OpenAI Compatible)</option>
+          <option value="openai">{t.openai}</option>
+          <option value="claude">{t.claude}</option>
+          <option value="deepseek">{t.deepseek}</option>
+          <option value="zhipu">{t.zhipu}</option>
+          <option value="kimi">{t.kimi}</option>
+          <option value="codex">{t.codex}</option>
+          <option value="custom">{t.custom}</option>
         </select>
       </div>
 
       {/* API Key */}
       <div className="mb-3">
-        <label className="block text-[10px] text-gray-400 mb-1">API Key</label>
+        <label className="block text-[10px] text-gray-400 mb-1">{t.apiKey}</label>
         <input
           type="password"
           value={config.apiKey}
@@ -437,7 +454,7 @@ export default function SettingsPanel() {
 
       {/* Model */}
       <div className="mb-4">
-        <label className="block text-[10px] text-gray-400 mb-1">模型</label>
+        <label className="block text-[10px] text-gray-400 mb-1">{t.model}</label>
         <input
           type="text"
           value={config.model}
@@ -453,15 +470,15 @@ export default function SettingsPanel() {
         disabled={loading}
         className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded text-xs font-medium transition-colors"
       >
-        {loading ? '保存中...' : saved ? '✓ 已保存' : '保存配置'}
+        {loading ? t.saving : saved ? t.savedShort : t.save}
       </button>
 
       {/* Preset Hints */}
       <div className="mt-4 p-2 bg-gray-800 rounded border border-gray-700">
-        <h3 className="text-[10px] font-medium text-gray-400 mb-1">配置提示</h3>
+        <h3 className="text-[10px] font-medium text-gray-400 mb-1">{t.configTip}</h3>
         <div className="space-y-1 text-[10px] text-gray-500">
-          <p>选择上方提供商会自动填充 Base URL 和默认模型，你仍可手动修改。</p>
-          <p>所有提供商均使用 OpenAI 兼容格式（/chat/completions）。</p>
+          <p>{t.configTip1}</p>
+          <p>{t.configTip2}</p>
         </div>
       </div>
     </div>
